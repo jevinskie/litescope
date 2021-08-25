@@ -78,6 +78,8 @@ def add_triggers(args, analyzer, signals):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="""LiteScope Client utility""")
+    parser.add_argument("-a", "--host",          default="localhost",      help="LiteX server host")
+    parser.add_argument("-p", "--port",          default=1234,             help="LiteX server port")
     parser.add_argument("-r", "--rising-edge",   action="append",          help="Add rising edge trigger")
     parser.add_argument("-f", "--falling-edge",  action="append",          help="Add falling edge trigger")
     parser.add_argument("-v", "--value-trigger", action="append", nargs=2, help="Add conditional trigger with given value",
@@ -112,7 +114,7 @@ def main():
         sys.exit(0)
 
     # Create and open remote control.
-    bus = RemoteClient()
+    bus = RemoteClient(host=args.host, port=args.port)
     bus.open()
 
     # Configure and run LiteScope analyzer.

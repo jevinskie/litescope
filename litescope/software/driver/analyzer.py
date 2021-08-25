@@ -163,7 +163,7 @@ class LiteScopeAnalyzerDriver:
             print("[writing to " + filename + "]...")
         name, ext = os.path.splitext(filename)
         if ext == ".vcd":
-            dump = VCDDump()
+            dump = VCDDump(samplerate=samplerate)
         elif ext == ".csv":
             dump = CSVDump()
         elif ext == ".py":

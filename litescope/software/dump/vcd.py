@@ -21,12 +21,20 @@ def vcd_codes():
 
 
 class VCDDump(Dump):
-    def __init__(self, dump=None, timescale="1ps", comment=""):
+    def __init__(self, dump=None, samplerate=None, timescale="1ps", comment=""):
         Dump.__init__(self)
         self.variables = [] if dump is None else dump.variables
         self.timescale = timescale
         self.comment = comment
         self.cnt = -1
+        self.samplerate = samplerate
+
+    @property
+    def current_time_in_ps(self):
+        assert self.timescale == "1ps"
+        assert self.samplerate is not None
+        return int((self.cnt + 1) * (10**12/self.samplerate))
+
 
     def change(self):
         r = ""
@@ -44,6 +52,7 @@ class VCDDump(Dump):
         if c != "":
             r += "#"
             r += str(self.cnt+1)
+            # r += str(self.current_time_in_ps)
             r += "\n"
             r += c
         return r
@@ -65,7 +74,8 @@ class VCDDump(Dump):
 
     def generate_timescale(self):
         r = "$timescale "
-        r += self.timescale
+        # r += self.timescale
+        r += f'{int(10**12 / 125_000_000 / 2)}ps'
         r += " $end\n"
         return r
 
