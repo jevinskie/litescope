@@ -54,7 +54,7 @@ class _Trigger(Module, AutoCSR):
 
         # Control re-synchronization
         enable   = Signal()
-        enable_d = Signal()
+        self.enable_d = enable_d = Signal()
         self.specials += MultiReg(self.enable.storage, enable, "scope")
         self.sync.scope += enable_d.eq(enable)
 
