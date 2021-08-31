@@ -74,7 +74,7 @@ class _Trigger(Module, AutoCSR):
         ]
 
         # Hit and memory read/flush
-        hit   = Signal()
+        self.hit = hit = Signal()
         flush = WaitTimer(2*depth)
         flush = ClockDomainsRenamer("scope")(flush)
         self.submodules += flush
