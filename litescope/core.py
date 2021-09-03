@@ -170,6 +170,9 @@ class _Storage(Module, AutoCSR):
         done = Signal()
         self.specials += MultiReg(done, self.done.status)
 
+        # Expose trigger
+        self.run_flag = run_flag = Signal()
+
         # Memory
         mem = stream.SyncFIFO([("data", data_width)], depth, buffered=True)
         mem = ClockDomainsRenamer("scope")(mem)
@@ -211,6 +214,7 @@ class _Storage(Module, AutoCSR):
             mem.source.ready.eq(mem.level >= offset)
         )
         fsm.act("RUN",
+            run_flag.eq(1),
             sink.connect(mem.sink, omit={"hit"}),
             If(mem.level >= length,
                 NextState("IDLE"),
