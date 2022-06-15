@@ -1,3 +1,8 @@
+# Example artifacts
+examples/analyzer.csv
+examples/csr.csv
+examples/dump.vcd
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
