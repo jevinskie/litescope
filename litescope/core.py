@@ -144,8 +144,18 @@ class _Mux(Module, AutoCSR):
 class _RunLengthEncoder(Module):
     def __init__(self, data_width):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
-        self.source = source = stream.Endpoint(core_layout(data_width))
-        self.comb += sink.connect(source)
+        self.source = source = stream.Endpoint(core_layout(data_width + 1))
+        current = sink.payload.data
+        last = Signal(data_width)
+        output = source.payload.data
+        self.sync.scope += If(sink.valid, last.eq(current))
+        changed = Signal()
+        self.comb += changed.eq(last != current)
+        self.comb += [
+            sink.connect(source, omit=["data"]),
+            output[1:].eq(current),
+            output[0].eq(changed),
+        ]
 
 
 class _Storage(Module, AutoCSR):
@@ -154,8 +164,7 @@ class _Storage(Module, AutoCSR):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         if rle:
             self.submodules.rle = _RunLengthEncoder(data_width)
-            # data_width += 1
-            sink_internal = stream.Endpoint(core_layout(data_width))
+            data_width += 1
             self.comb += sink.connect(self.rle.sink)
             sink_internal = self.rle.source
         else:

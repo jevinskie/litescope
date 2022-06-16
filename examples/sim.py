@@ -80,11 +80,11 @@ class SimSoC(SoCCore):
         count_div16 = Signal(len(count) - 4)
         self.comb += count_div16.eq(count[4:])
         analyzer_signals = [
-            count_div4,
+            # count_div4,
             count_div16,
         ]
-        if not slim:
-            analyzer_signals.append(self.ethphy.sink)
+        # if not slim:
+        #     analyzer_signals.append(self.ethphy.sink)
         self.submodules.analyzer = LiteScopeAnalyzer(
             analyzer_signals,
             depth=1024,
