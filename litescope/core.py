@@ -145,7 +145,10 @@ class _RunLengthEncoder(Module):
     def __init__(self, data_width):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         self.source = source = stream.Endpoint(core_layout(data_width + 1))
-        
+
+        valid, last_valid = sink.valid, Signal()
+        self.sync += last_valid.eq(valid)
+
         output = source.payload.data
         output_valid = Signal()
 
@@ -155,8 +158,8 @@ class _RunLengthEncoder(Module):
         self.sync.scope += If(sink.valid, last.eq(current))
 
         same, last_same = Signal(), Signal()
-        self.sync.scope += last_same.eq(same)
         self.comb += same.eq(last == current)
+        self.sync.scope += last_same.eq(same)
 
         # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
         counter_width = max(4, data_width)
@@ -169,7 +172,7 @@ class _RunLengthEncoder(Module):
         rle_encoded = Signal()
         self.comb += rle_encoded.eq(same & ~(rle_ovf | rle_last))
 
-        self.comb += output_valid.eq(~same | rle_ovf)
+        self.comb += output_valid.eq(last_valid & (~same | rle_ovf | rle_last))
 
         rle_data = Signal(data_width)
         self.comb += [
@@ -180,9 +183,9 @@ class _RunLengthEncoder(Module):
 
         self.comb += [
             sink.connect(source, omit=["data", "valid"]),
-            source.valid.eq(output_valid),
-            output[1:].eq(rle_data),
-            output[0].eq(rle_encoded),
+            source.valid.eq(last_valid),
+            output[1:].eq(last),
+            output[0].eq(last_same),
         ]
 
 
