@@ -184,8 +184,8 @@ class _RunLengthEncoder(Module):
         self.comb += [
             sink.connect(source, omit=["data", "valid"]),
             source.valid.eq(last_valid),
-            output[1:].eq(last),
-            output[0].eq(last_same),
+            output[1:].eq(rle_data),
+            output[0].eq(rle_encoded),
         ]
 
 
