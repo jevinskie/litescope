@@ -143,12 +143,9 @@ class _Mux(Module, AutoCSR):
 
 class _RunLengthEncoder(Module):
     def __init__(self, data_width):
-        self.sink_adb = sink_adb = stream.Endpoint(core_layout(data_width))
-        self.source_adb = source_adb = stream.Endpoint(core_layout(data_width))
-        self.findme_sig = Signal()
-        self.comb += self.findme_sig.eq(1)
-        # source.connect(sink)
-        sink_adb.connect(source_adb)
+        self.sink = sink = stream.Endpoint(core_layout(data_width))
+        self.source = source = stream.Endpoint(core_layout(data_width))
+        self.comb += sink.connect(source)
 
 
 class _Storage(Module, AutoCSR):
@@ -159,13 +156,8 @@ class _Storage(Module, AutoCSR):
             self.submodules.rle = _RunLengthEncoder(data_width)
             # data_width += 1
             sink_internal = stream.Endpoint(core_layout(data_width))
-            # sink.connect(self.rle.sink)
-            # self.rle.sink_adb.connect(sink)
-            # self.rle.source.connect(sink_internal)
-            # sink_internal.connect(self.rle.source_adb)
-            # sink_internal.connect(sink)
-            # sink.connect(sink_internal)
-            sink_internal = sink
+            self.comb += sink.connect(self.rle.sink)
+            sink_internal = self.rle.source
         else:
             sink_internal = sink
         print(f"storage DW final: {data_width}")
