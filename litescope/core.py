@@ -6,6 +6,7 @@
 # Copyright (c) 2016 Tim 'mithro' Ansell <mithro@mithis.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from attr import s
 from migen import *
 from migen.genlib.misc import WaitTimer
 from migen.genlib.cdc import MultiReg, PulseSynchronizer
@@ -140,9 +141,24 @@ class _Mux(Module, AutoCSR):
         self.comb += Case(value, cases)
 
 
-class _Storage(Module, AutoCSR):
-    def __init__(self, data_width, depth):
+class _RunLengthEncoder(Module):
+    def __init__(self, data_width):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
+        self.source = source = stream.Endpoint(core_layout(data_width + 1))
+        source.connect(sink)
+
+
+class _Storage(Module, AutoCSR):
+    def __init__(self, data_width, depth, rle=False):
+        self.sink = sink = stream.Endpoint(core_layout(data_width))
+        if rle:
+            self.submodules.rle = _RunLengthEncoder(data_width)
+            data_width += 1
+            sink_internal = stream.Endpoint(core_layout(data_width))
+            sink.connect(self.rle.sink)
+            self.rle.source.connect(sink_internal)
+        else:
+            sink_internal = sink
 
         self.enable    = CSRStorage()
         self.done      = CSRStatus()
@@ -197,11 +213,11 @@ class _Storage(Module, AutoCSR):
             If(enable & ~enable_d,
                 NextState("FLUSH")
             ),
-            sink.ready.eq(1),
+            sink_internal.ready.eq(1),
             mem.source.connect(cdc.sink)
         )
         fsm.act("FLUSH",
-            sink.ready.eq(1),
+            sink_internal.ready.eq(1),
             mem_flush.wait.eq(1),
             mem.source.ready.eq(1),
             If(mem_flush.done,
@@ -209,14 +225,14 @@ class _Storage(Module, AutoCSR):
             )
         )
         fsm.act("WAIT",
-            sink.connect(mem.sink, omit={"hit"}),
-            If(sink.valid & sink.hit,
+            sink_internal.connect(mem.sink, omit={"hit"}),
+            If(sink_internal.valid & sink_internal.hit,
                 NextState("RUN")
             ),
             mem.source.ready.eq(mem.level >= offset)
         )
         fsm.act("RUN",
-            sink.connect(mem.sink, omit={"hit"}),
+            sink_internal.connect(mem.sink, omit={"hit"}),
             If(mem.level >= length,
                 NextState("IDLE"),
             )
@@ -240,13 +256,16 @@ class _Storage(Module, AutoCSR):
 
 
 class LiteScopeAnalyzer(Module, AutoCSR):
-    def __init__(self, groups, depth, samplerate=1e12, clock_domain="sys", trigger_depth=16, subsampler_bits=16, register=False, csr_csv="analyzer.csv"):
+    def __init__(self, groups, depth, rle_nbits_min=None, samplerate=1e12, clock_domain="sys", trigger_depth=16, subsampler_bits=16, register=False, csr_csv="analyzer.csv"):
         self.groups          = groups = self.format_groups(groups)
         self.depth           = depth
         self.samplerate      = int(samplerate)
         self.subsampler_bits = subsampler_bits
+        self.rle_nbits_min   = rle_nbits_min
 
         self.data_width = data_width = max([sum([len(s) for s in g]) for g in groups.values()])
+        if rle_nbits_min:
+            self.data_width = data_width = min(data_width, rle_nbits_min)
 
         self.csr_csv = csr_csv
 
@@ -275,7 +294,7 @@ class LiteScopeAnalyzer(Module, AutoCSR):
         self.submodules.subsampler = _SubSampler(data_width, counter_bits=self.subsampler_bits)
 
         # Storage
-        self.submodules.storage = _Storage(data_width, depth)
+        self.submodules.storage = _Storage(data_width, depth, rle=bool(rle_nbits_min))
 
         # Pipeline
         self.submodules.pipeline = stream.Pipeline(

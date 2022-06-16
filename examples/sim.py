@@ -81,6 +81,7 @@ class SimSoC(SoCCore):
         self.submodules.analyzer = LiteScopeAnalyzer(
             analyzer_signals,
             depth=1024,
+            rle_nbits_min=None,
             clock_domain="sys",
             samplerate=self.sys_clk_freq,
             csr_csv="analyzer.csv",
