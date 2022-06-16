@@ -148,29 +148,29 @@ class _RunLengthEncoder(Module):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         self.source = source = stream.Endpoint(core_layout(data_width + 1))
 
-        valid, last_valid = sink.valid, Signal()
-        self.sync.scope += last_valid.eq(valid)
+        valid, valid_d = sink.valid, Signal()
+        self.sync.scope += valid_d.eq(valid)
 
         output = source.payload.data
         rle_valid = Signal()
-        last_reinit = Signal()
-        self.sync.scope += last_reinit.eq(reinit)
+        reinit_d = Signal()
+        self.sync.scope += reinit_d.eq(reinit)
 
-        current = sink.payload.data
-        last = Signal(data_width)
-        self.sync.scope += If(sink.valid, last.eq(current))
+        data = sink.payload.data
+        data_d = Signal(data_width)
+        self.sync.scope += If(sink.valid, data_d.eq(data))
 
-        hit, last_hit = sink.hit, Signal()
-        self.sync.scope += last_hit.eq(hit)
+        hit, hit_d = sink.hit, Signal()
+        self.sync.scope += hit_d.eq(hit)
 
-        same, last_same = Signal(), Signal()
-        self.comb += same.eq(last == current)
-        self.sync.scope += last_same.eq(same)
+        same, same_d = Signal(), Signal()
+        self.comb += same.eq(data_d == data)
+        self.sync.scope += same_d.eq(same)
 
         rle_data = Signal(data_width)
         rle_encoded = Signal()
         rle_last = Signal()
-        self.comb += rle_last.eq(~same & last_same)
+        self.comb += rle_last.eq(~same & same_d)
 
         # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
         self.counter_width = counter_width = min(24, data_width)
@@ -180,12 +180,12 @@ class _RunLengthEncoder(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="NEW")
         fsm.act("NEW",
-            rle_data.eq(last),
+            rle_data.eq(data_d),
             rle_encoded.eq(0),
-            rle_valid.eq(last_valid),
+            rle_valid.eq(valid_d),
             NextValue(rle_cnt, 0),
             NextValue(rle_ovf, 0),
-            If(same & source.ready & last_hit, NextState("SAME")),
+            If(same & source.ready & hit_d, NextState("SAME")),
         )
         fsm.act("SAME",
             rle_data.eq(rle_cnt),
@@ -197,7 +197,7 @@ class _RunLengthEncoder(Module):
                 NextValue(rle_ovf, 1)
             ),
             If(rle_ovf | reinit,
-                rle_data.eq(last),
+                rle_data.eq(data_d),
                 rle_encoded.eq(0),
                 NextValue(rle_cnt, 0),
                 NextValue(rle_ovf, 0),
@@ -210,7 +210,7 @@ class _RunLengthEncoder(Module):
             source.valid.eq(rle_valid),
             output[1:].eq(rle_data),
             output[0].eq(rle_encoded),
-            source.hit.eq(last_hit)
+            source.hit.eq(hit_d)
         ]
 
 
