@@ -219,8 +219,8 @@ class _RunLengthEncoder(Module):
 
 class _Storage(Module, AutoCSR):
     def __init__(self, data_width, depth, rle=False):
-        print(f"storage DW: {data_width}")
         self.sink = sink = stream.Endpoint(core_layout(data_width))
+        rle_reinit = Signal()
         if rle:
             self.submodules.rle = _RunLengthEncoder(data_width)
             data_width += 1
@@ -228,7 +228,6 @@ class _Storage(Module, AutoCSR):
             sink_internal = self.rle.source
         else:
             sink_internal = sink
-        print(f"storage DW final: {data_width}")
 
         self.enable    = CSRStorage()
         self.done      = CSRStatus()
@@ -297,12 +296,13 @@ class _Storage(Module, AutoCSR):
         fsm.act("WAIT",
             sink_internal.connect(mem.sink, omit={"hit"}),
             If(sink_internal.valid & sink_internal.hit,
-                NextState("RUN")
+                NextState("RUN"),
             ),
             mem.source.ready.eq(mem.level >= offset)
         )
         fsm.act("RUN",
             sink_internal.connect(mem.sink, omit={"hit"}),
+            If(~mem.level, rle_reinit.eq(1)),
             If(mem.level >= length,
                 NextState("IDLE"),
             )
@@ -334,10 +334,8 @@ class LiteScopeAnalyzer(Module, AutoCSR):
         self.rle_nbits_min   = rle_nbits_min
 
         self.data_width = data_width = max([sum([len(s) for s in g]) for g in groups.values()])
-        print(f"pre DW: {data_width}")
         if rle_nbits_min:
             self.data_width = data_width = max(data_width, rle_nbits_min)
-        print(f"post DW: {data_width}")
 
         self.csr_csv = csr_csv
 
