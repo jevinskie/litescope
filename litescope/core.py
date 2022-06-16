@@ -163,11 +163,6 @@ class _RunLengthEncoder(Module):
         hit, last_hit = sink.hit, Signal()
         self.sync.scope += last_hit.eq(hit)
 
-        ready, last_ready = source.ready, Signal()
-        self.sync.scope += last_ready.eq(ready)
-        hit, last_hit = sink.hit, Signal()
-        self.sync.scope += last_hit.eq(hit)
-
         same, last_same = Signal(), Signal()
         self.comb += same.eq(last == current)
         self.sync.scope += last_same.eq(same)
@@ -178,7 +173,7 @@ class _RunLengthEncoder(Module):
         self.comb += rle_last.eq(~same & last_same)
 
         # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
-        counter_width = min(2, data_width)
+        counter_width = min(24, data_width)
         rle_cnt_max = 2**counter_width - 1
         rle_cnt = Signal(counter_width)
         rle_ovf = Signal()
@@ -190,7 +185,7 @@ class _RunLengthEncoder(Module):
             rle_valid.eq(last_valid),
             NextValue(rle_cnt, 0),
             NextValue(rle_ovf, 0),
-            If(same & ready & last_hit, NextState("SAME")),
+            If(same & source.ready & last_hit, NextState("SAME")),
         )
         fsm.act("SAME",
             rle_data.eq(rle_cnt),
@@ -208,7 +203,6 @@ class _RunLengthEncoder(Module):
                 NextValue(rle_ovf, 0),
             ),
             If(rle_last, NextState("NEW")),
-            # Display("rle_cnt: %d rle_ovf %d rle_encoded: %d rle_valid: %d rle_data: %032b", rle_cnt, rle_ovf, rle_encoded, rle_valid, rle_data),
         )
 
 
@@ -219,8 +213,6 @@ class _RunLengthEncoder(Module):
             output[0].eq(rle_encoded),
             source.hit.eq(last_hit)
         ]
-
-        # self.submodules += MonitorFSMState(fsm, "rle", True, True)
 
 
 class _Storage(Module, AutoCSR):
