@@ -73,12 +73,18 @@ class SimSoC(SoCCore):
             self.add_etherbone(phy=self.ethphy, ip_address="192.168.42.50")
 
         # LiteScope Analyzer -----------------------------------------------------------------------
-        count = Signal(8)
+        count = Signal(24)
         self.sync += count.eq(count + 1)
+        count_div4 = Signal(len(count) - 2)
+        self.comb += count_div4.eq(count[2:])
+        count_div16 = Signal(len(count) - 4)
+        self.comb += count_div16.eq(count[4:])
         analyzer_signals = [
-            self.cpu.ibus,
-            count,
+            count_div4,
+            count_div16,
         ]
+        if not slim:
+            analyzer_signals.append(self.ethphy.sink)
         self.submodules.analyzer = LiteScopeAnalyzer(
             analyzer_signals,
             depth=1024,
@@ -112,6 +118,7 @@ def main():
     builder_kwargs = builder_argdict(args)
 
     soc_kwargs["sys_clk_freq"] = sys_clk_freq
+    soc_kwargs["cpu_type"] = "None"
     soc_kwargs["uart_name"] = "crossover" if not args.slim else "stub"
     soc_kwargs["ident_version"] = True
 
