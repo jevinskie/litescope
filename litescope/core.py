@@ -17,6 +17,9 @@ from litex.soc.interconnect.csr import *
 from litex.soc.cores.gpio import GPIOInOut
 from litex.soc.interconnect import stream
 
+from litex.gen.fhdl.sim import Monitor, MonitorArg, MonitorFSMState
+from litex.gen.fhdl.utils import get_signals
+
 # LiteScope IO -------------------------------------------------------------------------------------
 
 class LiteScopeIO(Module, AutoCSR):
@@ -147,51 +150,71 @@ class _RunLengthEncoder(Module):
         self.source = source = stream.Endpoint(core_layout(data_width + 1))
 
         valid, last_valid = sink.valid, Signal()
-        self.sync += last_valid.eq(valid)
+        self.sync.scope += last_valid.eq(valid)
 
         output = source.payload.data
-        output_valid = Signal()
+        rle_valid = Signal()
 
         current = sink.payload.data
-
         last = Signal(data_width)
         self.sync.scope += If(sink.valid, last.eq(current))
+
+        hit, last_hit = sink.hit, Signal()
+        self.sync.scope += last_hit.eq(hit)
 
         same, last_same = Signal(), Signal()
         self.comb += same.eq(last == current)
         self.sync.scope += last_same.eq(same)
 
-        # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
-        counter_width = min(2, data_width) + 1
-        rle_cnt, last_rle_cnt = Signal(counter_width), Signal(counter_width)
-        rle_ovf = Signal()
-        self.sync.scope += [
-            rle_ovf.eq(last_rle_cnt == 2**(len(rle_cnt)-1) - 1),
-            If(same & ~rle_ovf, rle_cnt.eq(rle_cnt + 1)).Else(rle_cnt.eq(0)),
-            last_rle_cnt.eq(rle_cnt),
-        ]
+        rle_data = Signal(data_width)
+        rle_encoded = Signal()
         rle_last = Signal()
         self.comb += rle_last.eq(~same & last_same)
 
-        rle_encoded = Signal()
-        self.comb += rle_encoded.eq(last_same & ~rle_ovf)
+        # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
+        counter_width = min(2, data_width)
+        rle_cnt_max = 2**counter_width - 1
+        rle_cnt = Signal(counter_width)
+        rle_ovf = Signal()
 
-        self.comb += output_valid.eq(last_valid & (~last_same | rle_ovf | rle_last))
-        self.sync.scope += Display("last: %0x lv: %b ls: %b rle_cnt: %d lrc: %d rle_ovf: %b rle_last: %b o: %032b", last, last_valid, last_same, rle_cnt, last_rle_cnt, rle_ovf, rle_last, output)
+        self.submodules.fsm = fsm = FSM(reset_state="NEW")
+        fsm.act("NEW",
+            rle_data.eq(last),
+            rle_encoded.eq(0),
+            rle_valid.eq(last_valid),
+            NextValue(rle_cnt, 0),
+            NextValue(rle_ovf, 0),
+            If(same & source.ready & source.hit, NextState("SAME")),
+        )
+        fsm.act("SAME",
+            rle_data.eq(rle_cnt),
+            rle_encoded.eq(1),
+            rle_valid.eq(rle_last | rle_ovf),
+            NextValue(rle_cnt, rle_cnt + 1),
+            If(rle_cnt == rle_cnt_max,
+                rle_valid.eq(1),
+                NextValue(rle_ovf, 1)
+            ),
+            If(rle_ovf,
+                rle_data.eq(last),
+                rle_encoded.eq(0),
+                NextValue(rle_cnt, 0),
+                NextValue(rle_ovf, 0),
+            ),
+            If(rle_last, NextState("NEW")),
+            # Display("rle_cnt: %d rle_ovf %d rle_encoded: %d rle_valid: %d rle_data: %032b", rle_cnt, rle_ovf, rle_encoded, rle_valid, rle_data),
+        )
 
-        rle_data = Signal(data_width)
+
         self.comb += [
-            rle_data.eq(0),
-            If(~rle_encoded, rle_data.eq(last)).Else(rle_data.eq(last_rle_cnt - 1))
-        ]
-
-
-        self.comb += [
-            sink.connect(source, omit=["data", "valid"]),
-            source.valid.eq(output_valid),
+            sink.connect(source, omit=["data", "valid", "hit"]),
+            source.valid.eq(rle_valid),
             output[1:].eq(rle_data),
             output[0].eq(rle_encoded),
+            source.hit.eq(last_hit)
         ]
+
+        # self.submodules += MonitorFSMState(fsm, "rle", True, True)
 
 
 class _Storage(Module, AutoCSR):
