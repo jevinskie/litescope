@@ -162,28 +162,33 @@ class _RunLengthEncoder(Module):
         self.sync.scope += last_same.eq(same)
 
         # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
-        counter_width = max(4, data_width)
-        rle_cnt = Signal(counter_width)
-        self.sync.scope += If(same, rle_cnt.eq(rle_cnt + 1)).Else(rle_cnt.eq(0))
+        counter_width = min(2, data_width) + 1
+        rle_cnt, last_rle_cnt = Signal(counter_width), Signal(counter_width)
+        rle_ovf = Signal()
+        self.sync.scope += [
+            rle_ovf.eq(last_rle_cnt == 2**(len(rle_cnt)-1) - 1),
+            If(same & ~rle_ovf, rle_cnt.eq(rle_cnt + 1)).Else(rle_cnt.eq(0)),
+            last_rle_cnt.eq(rle_cnt),
+        ]
         rle_last = Signal()
         self.comb += rle_last.eq(~same & last_same)
-        rle_ovf = Signal()
-        self.sync.scope += rle_ovf.eq(rle_cnt == (2**len(rle_cnt) - 1))
-        rle_encoded = Signal()
-        self.comb += rle_encoded.eq(same & ~(rle_ovf | rle_last))
 
-        self.comb += output_valid.eq(last_valid & (~same | rle_ovf | rle_last))
+        rle_encoded = Signal()
+        self.comb += rle_encoded.eq(last_same & ~rle_ovf)
+
+        self.comb += output_valid.eq(last_valid & (~last_same | rle_ovf | rle_last))
+        self.sync.scope += Display("last: %0x lv: %b ls: %b rle_cnt: %d lrc: %d rle_ovf: %b rle_last: %b o: %032b", last, last_valid, last_same, rle_cnt, last_rle_cnt, rle_ovf, rle_last, output)
 
         rle_data = Signal(data_width)
         self.comb += [
             rle_data.eq(0),
-            If(~rle_encoded, rle_data.eq(last)).Else(rle_data.eq(rle_cnt))
+            If(~rle_encoded, rle_data.eq(last)).Else(rle_data.eq(last_rle_cnt - 1))
         ]
 
 
         self.comb += [
             sink.connect(source, omit=["data", "valid"]),
-            source.valid.eq(last_valid),
+            source.valid.eq(output_valid),
             output[1:].eq(rle_data),
             output[0].eq(rle_encoded),
         ]
