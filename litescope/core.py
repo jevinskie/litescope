@@ -148,11 +148,16 @@ class _RunLengthEncoder(Module):
         current = sink.payload.data
         last = Signal(data_width)
         output = source.payload.data
+        output_valid = Signal()
+        # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
+        counter_width = max(24, data_width)
+        rle_cnt = Signal(counter_width)
         self.sync.scope += If(sink.valid, last.eq(current))
         changed = Signal()
         self.comb += changed.eq(last != current)
         self.comb += [
-            sink.connect(source, omit=["data"]),
+            sink.connect(source, omit=["data", "valid"]),
+            source.valid.eq(changed & source.valid),
             output[1:].eq(current),
             output[0].eq(changed),
         ]
