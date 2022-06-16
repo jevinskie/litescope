@@ -6,7 +6,6 @@
 # Copyright (c) 2016 Tim 'mithro' Ansell <mithro@mithis.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from attr import s
 from migen import *
 from migen.genlib.misc import WaitTimer
 from migen.genlib.cdc import MultiReg, PulseSynchronizer
@@ -145,7 +144,7 @@ class _Mux(Module, AutoCSR):
 
 
 class _RunLengthEncoder(Module):
-    def __init__(self, data_width):
+    def __init__(self, reinit, data_width):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         self.source = source = stream.Endpoint(core_layout(data_width + 1))
 
@@ -154,11 +153,18 @@ class _RunLengthEncoder(Module):
 
         output = source.payload.data
         rle_valid = Signal()
+        last_reinit = Signal()
+        self.sync.scope += last_reinit.eq(reinit)
 
         current = sink.payload.data
         last = Signal(data_width)
         self.sync.scope += If(sink.valid, last.eq(current))
 
+        hit, last_hit = sink.hit, Signal()
+        self.sync.scope += last_hit.eq(hit)
+
+        ready, last_ready = source.ready, Signal()
+        self.sync.scope += last_ready.eq(ready)
         hit, last_hit = sink.hit, Signal()
         self.sync.scope += last_hit.eq(hit)
 
@@ -184,7 +190,7 @@ class _RunLengthEncoder(Module):
             rle_valid.eq(last_valid),
             NextValue(rle_cnt, 0),
             NextValue(rle_ovf, 0),
-            If(same & source.ready & source.hit, NextState("SAME")),
+            If(same & ready & last_hit, NextState("SAME")),
         )
         fsm.act("SAME",
             rle_data.eq(rle_cnt),
@@ -195,7 +201,7 @@ class _RunLengthEncoder(Module):
                 rle_valid.eq(1),
                 NextValue(rle_ovf, 1)
             ),
-            If(rle_ovf,
+            If(rle_ovf | reinit,
                 rle_data.eq(last),
                 rle_encoded.eq(0),
                 NextValue(rle_cnt, 0),
@@ -222,7 +228,7 @@ class _Storage(Module, AutoCSR):
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         rle_reinit = Signal()
         if rle:
-            self.submodules.rle = _RunLengthEncoder(data_width)
+            self.submodules.rle = _RunLengthEncoder(rle_reinit, data_width)
             data_width += 1
             self.comb += sink.connect(self.rle.sink)
             sink_internal = self.rle.source
@@ -282,11 +288,9 @@ class _Storage(Module, AutoCSR):
             If(enable & ~enable_d,
                 NextState("FLUSH")
             ),
-            sink_internal.ready.eq(1),
             mem.source.connect(cdc.sink)
         )
         fsm.act("FLUSH",
-            sink_internal.ready.eq(1),
             mem_flush.wait.eq(1),
             mem.source.ready.eq(1),
             If(mem_flush.done,
@@ -297,12 +301,13 @@ class _Storage(Module, AutoCSR):
             sink_internal.connect(mem.sink, omit={"hit"}),
             If(sink_internal.valid & sink_internal.hit,
                 NextState("RUN"),
+                NextValue(rle_reinit, 1),
             ),
             mem.source.ready.eq(mem.level >= offset)
         )
         fsm.act("RUN",
             sink_internal.connect(mem.sink, omit={"hit"}),
-            If(~mem.level, rle_reinit.eq(1)),
+            NextValue(rle_reinit, 0),
             If(mem.level >= length,
                 NextState("IDLE"),
             )
