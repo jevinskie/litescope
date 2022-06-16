@@ -173,7 +173,7 @@ class _RunLengthEncoder(Module):
         self.comb += rle_last.eq(~same & last_same)
 
         # Keep counter size down, 24 bits is enough for 15 seconds @ 1 GHz
-        counter_width = min(24, data_width)
+        self.counter_width = counter_width = min(24, data_width)
         rle_cnt_max = 2**counter_width - 1
         rle_cnt = Signal(counter_width)
         rle_ovf = Signal()
@@ -204,7 +204,6 @@ class _RunLengthEncoder(Module):
             ),
             If(rle_last, NextState("NEW")),
         )
-
 
         self.comb += [
             sink.connect(source, omit=["data", "valid", "hit"]),
@@ -399,6 +398,7 @@ class LiteScopeAnalyzer(Module, AutoCSR):
         r += format_line("config", "None", "depth", str(self.depth))
         r += format_line("config", "None", "samplerate", str(self.samplerate))
         r += format_line("config", "None", "subsampler_counter_bits", str(self.subsampler_bits))
+        r += format_line("config", "None", "rle", str(int(bool(self.rle_nbits_min))))
         for i, signals in self.groups.items():
             for s in signals:
                 r += format_line("signal", str(i), vns.get_name(s), str(len(s)))
