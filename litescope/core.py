@@ -143,22 +143,32 @@ class _Mux(Module, AutoCSR):
 
 class _RunLengthEncoder(Module):
     def __init__(self, data_width):
-        self.sink = sink = stream.Endpoint(core_layout(data_width))
-        self.source = source = stream.Endpoint(core_layout(data_width + 1))
-        source.connect(sink)
+        self.sink_adb = sink_adb = stream.Endpoint(core_layout(data_width))
+        self.source_adb = source_adb = stream.Endpoint(core_layout(data_width))
+        self.findme_sig = Signal()
+        self.comb += self.findme_sig.eq(1)
+        # source.connect(sink)
+        sink_adb.connect(source_adb)
 
 
 class _Storage(Module, AutoCSR):
     def __init__(self, data_width, depth, rle=False):
+        print(f"storage DW: {data_width}")
         self.sink = sink = stream.Endpoint(core_layout(data_width))
         if rle:
             self.submodules.rle = _RunLengthEncoder(data_width)
-            data_width += 1
+            # data_width += 1
             sink_internal = stream.Endpoint(core_layout(data_width))
-            sink.connect(self.rle.sink)
-            self.rle.source.connect(sink_internal)
+            # sink.connect(self.rle.sink)
+            # self.rle.sink_adb.connect(sink)
+            # self.rle.source.connect(sink_internal)
+            # sink_internal.connect(self.rle.source_adb)
+            # sink_internal.connect(sink)
+            # sink.connect(sink_internal)
+            sink_internal = sink
         else:
             sink_internal = sink
+        print(f"storage DW final: {data_width}")
 
         self.enable    = CSRStorage()
         self.done      = CSRStatus()
@@ -264,8 +274,10 @@ class LiteScopeAnalyzer(Module, AutoCSR):
         self.rle_nbits_min   = rle_nbits_min
 
         self.data_width = data_width = max([sum([len(s) for s in g]) for g in groups.values()])
+        print(f"pre DW: {data_width}")
         if rle_nbits_min:
-            self.data_width = data_width = min(data_width, rle_nbits_min)
+            self.data_width = data_width = max(data_width, rle_nbits_min)
+        print(f"post DW: {data_width}")
 
         self.csr_csv = csr_csv
 

@@ -51,7 +51,7 @@ class Platform(SimPlatform):
 
 
 class SimSoC(SoCCore):
-    def __init__(self, sys_clk_freq=None, **kwargs):
+    def __init__(self, sys_clk_freq=None, slim=False, **kwargs):
         platform = Platform()
         sys_clk_freq = int(sys_clk_freq)
 
@@ -68,8 +68,9 @@ class SimSoC(SoCCore):
         self.submodules.crg = CRG(platform.request("sys_clk"))
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth"))
-        self.add_etherbone(phy=self.ethphy, ip_address="192.168.42.50")
+        if not slim:
+            self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth"))
+            self.add_etherbone(phy=self.ethphy, ip_address="192.168.42.50")
 
         # LiteScope Analyzer -----------------------------------------------------------------------
         count = Signal(8)
@@ -81,7 +82,7 @@ class SimSoC(SoCCore):
         self.submodules.analyzer = LiteScopeAnalyzer(
             analyzer_signals,
             depth=1024,
-            rle_nbits_min=None,
+            rle_nbits_min=15,
             clock_domain="sys",
             samplerate=self.sys_clk_freq,
             csr_csv="analyzer.csv",
@@ -96,6 +97,7 @@ def main():
     parser = argparse.ArgumentParser(description="LiteEth Bench Simulation")
     parser.add_argument("--opt-level", default="O3", help="Verilator optimization level")
     parser.add_argument("--debug-soc-gen", action="store_true", help="Don't build the SoC, just set it up")
+    parser.add_argument("--slim", action="store_true", help="Less modules to make generated verilog shorter")
     builder_args(parser)
     soc_core_args(parser)
     args = parser.parse_args()
@@ -110,12 +112,12 @@ def main():
     builder_kwargs = builder_argdict(args)
 
     soc_kwargs["sys_clk_freq"] = sys_clk_freq
-    soc_kwargs["uart_name"] = "crossover"
+    soc_kwargs["uart_name"] = "crossover" if not args.slim else "stub"
     soc_kwargs["ident_version"] = True
 
     builder_kwargs["csr_csv"] = "csr.csv"
 
-    soc = SimSoC(**soc_kwargs)
+    soc = SimSoC(**soc_kwargs, slim=args.slim)
     if not args.debug_soc_gen:
         builder = Builder(soc, **builder_kwargs)
         for i in range(2):
