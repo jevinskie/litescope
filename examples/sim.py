@@ -81,7 +81,8 @@ class SimSoC(SoCCore):
         self.comb += count_div16.eq(count[4:])
         analyzer_signals = [
             # count_div4,
-            count_div16,
+            # count_div16,
+            self.cpu.ibus,
         ]
         # if not slim:
         #     analyzer_signals.append(self.ethphy.sink)
@@ -118,7 +119,7 @@ def main():
     builder_kwargs = builder_argdict(args)
 
     soc_kwargs["sys_clk_freq"] = sys_clk_freq
-    soc_kwargs["cpu_type"] = "None"
+    # soc_kwargs["cpu_type"] = "None"
     soc_kwargs["uart_name"] = "crossover" if not args.slim else "stub"
     soc_kwargs["ident_version"] = True
 

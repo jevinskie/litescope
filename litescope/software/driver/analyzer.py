@@ -166,6 +166,7 @@ class LiteScopeAnalyzerDriver:
             rdsw = rdw * swpw
             datas = self.storage_mem_data.readfn(self.storage_mem_data.addr, length=rdsw, burst="fixed")
 
+            last_v = None
             for i, sv in enumerate(datas):
                 j = i % swpw
                 if j == 0:
