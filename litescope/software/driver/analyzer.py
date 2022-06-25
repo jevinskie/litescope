@@ -179,7 +179,8 @@ class LiteScopeAnalyzerDriver:
                         v = v >> 1
                         if rle_encoded:
                             assert last_v is not None
-                            self.data += [last_v] * (v + 1)
+                            # FIXME: HACK to prevent out-of-memory
+                            self.data += [last_v] * min((v + 1), 4096)
                         else:
                             self.data.append(v)
                             last_v = v
