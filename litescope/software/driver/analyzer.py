@@ -160,13 +160,14 @@ class LiteScopeAnalyzerDriver:
         remaining = length
         swpw = (self.data_width + 31) // 32 # Sub-Words per word
         mwbl = 192 // swpw                  # Max Burst len (in # of words)
+        last_v = None
 
         while remaining > 0:
             rdw  = min(remaining, mwbl)
             rdsw = rdw * swpw
             datas = self.storage_mem_data.readfn(self.storage_mem_data.addr, length=rdsw, burst="fixed")
 
-            last_v = None
+
             for i, sv in enumerate(datas):
                 j = i % swpw
                 if j == 0:
@@ -177,12 +178,13 @@ class LiteScopeAnalyzerDriver:
                         rle_encoded = bool(v & 1)
                         v = v >> 1
                         if rle_encoded:
+                            assert last_v is not None
                             self.data += [last_v] * (v + 1)
                         else:
                             self.data.append(v)
+                            last_v = v
                     else:
                         self.data.append(v)
-                    last_v = v
 
             remaining -= rdw
 
